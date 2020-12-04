@@ -1,4 +1,13 @@
-// Brian Troung
+////////////////////////////////
+//    Name: Brian Truong      //
+//    ID:                     //
+//                            //
+//    Name: Tyler Do          //
+//    ID: 1001553345          //
+//                            //
+//    Class: CSE 3301 - 002   //
+//                            //
+////////////////////////////////
 
 #define _GNU_SOURCE
 
