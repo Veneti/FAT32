@@ -145,7 +145,7 @@ int main()
         {
             if (strcmp(token[0], "open") == 0)
             {
-                filePtr = fopen(token[1], "w");
+                filePtr = fopen(token[1], "r");
                 if (filePtr == NULL)
                 {
                     printf("Error: Improper format. Could not do 'open <%s>'\n", token[1]);
@@ -189,16 +189,25 @@ int main()
                 {
                     perror("Error: Improper format. Please put in format close <filename>\n");
                 }
+            }
+            else if (strcmp(token[0], "bpb") == 0)
+            {
+                if (file_isOpen)
+                {
+                    char *line = "----------------------------------------------";
+                    //print out bpb section in decimal and hex
+                    printf("\nBPB Stats Output    %-8s  %-10s\n%s\n","Decimal","Hex",line);
+                    printf("BPB_BytsPerSec:     %-8d  0x%-8x\n",BPB_BytsPerSec,BPB_BytsPerSec);
+                    printf("BPB_SecPerClus:     %-8d  0x%-8x\n",BPB_SecPerClus,BPB_SecPerClus);
+                    printf("BPB_RsvdSecCnt:     %-8d  0x%-8x\n",BPB_RsvdSecCnt,BPB_RsvdSecCnt);
+                    printf("BPB_NumFATs:        %-8d  0x%-8x\n",BPB_NumFATs,BPB_NumFATs);
+                    printf("BPB_FATSz32:        %-8d  0x%-8x\n",BPB_FATSz32,BPB_FATSz32);
+                }
+                else
+                {
+                    printf("Error: File img is not open yet.\n");
 
-                //print out bpb section in decimal and hex
-
-                printf("BPB_BytsPerSec:     %d  %x\n",BPB_BytsPerSec,BPB_BytsPerSec);
-                printf("BPB_SecPerClus:     %d  %x\n",BPB_SecPerClus,BPB_SecPerClus);
-                printf("BPB_RsvdSecCnt:     %d  %x\n",BPB_RsvdSecCnt,BPB_RsvdSecCnt);
-                printf("BPB_NumFATs:        %d  %x\n",BPB_NumFATs,BPB_NumFATs);
-                printf("BPB_FATSz32:        %d  %x\n",BPB_FATSz32,BPB_FATSz32);
-                
-
+                }
             }
             else if (strcmp(token[0], "stat") == 0)
             {
