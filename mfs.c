@@ -57,17 +57,21 @@ struct __attribute__ ( ( __packed__ ) ) DirectoryEntry
 struct DirectoryEntry dir[16];
 
 
-int16_t BPB_BytsPerSec;
-int8_t BPB_SecPerClus;
-int16_t BPB_RsvdSecCnt;
-int8_t BPB_NumFATs;
-int16_t BPB_FATSz32;
+int16_t  BPB_BytsPerSec;
+int8_t   BPB_SecPerClus;
+int16_t  BPB_RsvdSecCnt;
+int8_t   BPB_NumFATs;
+int16_t  BPB_FATSz32;
 
 bool file_isOpen = false;
 FILE *filePtr;
 
+char correctDirectory[12];
+void directoryFormat(char *dirString);
+int32_t clusterAtribute(char *dirString);
+
 /*
-    Finds the starting address of the block of the sector
+    Finds the starting address of the block of the sector (FAT slides)
 */
 int32_t LBAToOffset(int32_t sector)
 {
@@ -76,7 +80,7 @@ int32_t LBAToOffset(int32_t sector)
 }
 
 /*
-
+    looks up into first FAT and returns logical block address (FAT slides)
 */
 int16_t nextLB(int32_t sector)
 {
@@ -206,7 +210,7 @@ int main()
                     file_isOpen = true;
                 }
 
-                //read bpb section
+                //read bpb section from reference byte
                 fseek(filePtr, 11, SEEK_SET);
                 fread(&BPB_BytsPerSec, 1, 2, filePtr);
 
@@ -223,7 +227,8 @@ int main()
                 fread(&BPB_FATSz32, 1, 4, filePtr);
 
                 //root dir address is losted in both reserved sector and FATs
-                int rootAddress = ( BPB_RsvdSecCnt * BPB_BytsPerSec) + (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec);
+                int rootAddress = ( BPB_RsvdSecCnt * BPB_BytsPerSec) + 
+                        (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec);
 
                 //printf("%x\n", rootAddress);
                 fseek(filePtr, rootAddress, SEEK_SET);
@@ -247,7 +252,7 @@ int main()
                 }
                 else
                 {
-                    perror("Error: Improper format. Please put in format close <filename>\n");
+                    perror("Error: No files are currently open.\n");
                 }
             }
             else if (strcmp(token[0], "bpb") == 0)
@@ -271,24 +276,40 @@ int main()
             }
             else if (strcmp(token[0], "stat") == 0)
             {
-                if (token[1] != NULL)
+                if (file_isOpen)
                 {
-                    // stat(token[1]);
+                    int cluster = clusterAtribute(token[1]);
+                    
+                    int i;
+                    for (i = 0; i < 16; i++)
+                    {
+											if (cluster == dir[i].DIR_FirstClusterLow)
+											{
+												printf("File Attribute: %d\n", dir[i].DIR_Attr);
+												printf("File Size: %d\n", dir[i].DIR_FileSize);
+												printf("Starting Cluster Number: %d\n", cluster);
+											}
+                        // if(compare(dir[i].DIR_NAME, token[1]))
+                        // printf("%d  %d   %d   \n", dir[i].DIR_Attr, 
+                        //     dir[i].DIR_FileSize, dir[i].DIR_FirstClusterLow);	
+                        // break;
+                    }
+                    
                 }
                 else
                 {
-                    printf("Error: Improper format. Please put in format stat <filename> or <directory name>\n");
+                    printf("Error: No files are currently open.\n");
                 }
             }
             else if (strcmp(token[0], "get") == 0)
             {
-                if (token[1] != NULL)
+                if (file_isOpen)
                 {
-                    // get(token[1]);
+                    printf("dd\n");
                 }
                 else
                 {
-                    printf("Error: Improper format. Please put in format get <filename>\n");
+                    printf("Error: No files are currently open.\n");
                 }
             }
 
@@ -358,15 +379,56 @@ int main()
             }
             else if (strcmp(token[0], "read") == 0)
             {
-                if (token[1] != NULL && token[2] != NULL && token[3] != NULL)
-                    printf("read\n");
-                    // read(token[1], atoi(token[2]), atoi(token[3]));
+                if (file_isOpen)
+                {
+                    int i = 0;
+                    int found = 0;
+                    
+                    int requestedOffset = atoi(token[2]);
+                    int requestedBytes = atoi(token[3]);
+
+                    for (i = 0; i < 16; i++)
+                    {
+                        if (compare(token[1], dir[i].DIR_NAME))
+                        {
+                            found = 1;
+                            int cluster = dir[i].DIR_FirstClusterLow;
+                            int searchSize = requestedOffset;
+                            //test loop from twitch
+                            while (searchSize >= BPB_BytsPerSec)
+                            {
+                                printf("%d\n",cluster);
+                                cluster = nextLB(cluster);
+                                searchSize -= BPB_BytsPerSec;
+                            }
+                            int offset = LBAToOffset(cluster);
+                            int byteOffset = BPB_BytsPerSec - (requestedOffset % BPB_BytsPerSec);
+                            fseek(filePtr, offset + byteOffset, SEEK_SET);
+                            int loopOffset = requestedOffset;
+                            
+                            unsigned char buffer[BPB_BytsPerSec];
+                            fread(buffer, 1, byteOffset, SEEK_SET);
+                            int j = 0;
+                            for (j = 0; j < byteOffset; j++)
+                            {
+                                printf("%x ", buffer[j]);
+                            }
+                            printf("\n");
+
+                        }
+                        
+
+                    }
+                    
+                }
                 else
-                    printf("Error: Improper format. Please put in format read <filename> <position> <number of bytes>\n");
+                {
+                    printf("Error: No files are currently open.\n");
+                }
             }
-            else if (strcmp(token[0], "exit") == 0)
+            else if (strcmp(token[0], "quit") == 0 || strcmp(token[0], "exit") == 0)
             {
-                // exit(0);
+                exit(0);
             }
             else
             {
@@ -376,4 +438,57 @@ int main()
   }
 
   return 0;
+}
+
+void directoryFormat(char *dirString)
+{
+	char source[12];
+	memset(source, ' ', 12);
+	
+	char *fileName = strtok(dirString, ".");
+
+	if(fileName)
+	{
+		strncpy(source, fileName, strlen(fileName));
+		fileName = strtok(NULL, ".");
+
+		if(fileName)
+		{
+			strncpy((char *)(source + 8), fileName, strlen(fileName));
+		}
+		
+		source[11] = '\0';
+
+		int i;
+		for (i = 0; i < 11; i++)
+		{
+			source[i] = toupper(source[i]);
+		}
+	}
+	else
+	{
+		strncpy(source, dirString, strlen(dirString));
+		source[11] = '\0';
+	}
+
+	strncpy(correctDirectory, source, 12);
+}
+
+int32_t clusterAtribute(char *dirString)
+{
+	directoryFormat(dirString);
+	int i;
+	for (i = 0; i < 16; i++)
+	{
+		char *directory = malloc(11);
+		memset(directory, '\0', 11);
+		memcpy(directory, dir[i].DIR_NAME, 11);
+		
+		if (strncmp(directory, correctDirectory, 11) == 0)
+		{
+			int firstClusterLow = dir[i].DIR_FirstClusterLow;
+			return firstClusterLow;
+		}
+	}
+	return -1;
 }
