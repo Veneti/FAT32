@@ -288,13 +288,27 @@ int main()
             }
             else if (strcmp(token[0], "ls") == 0)
             {
-                /*
-                int i;
-                for (i = 0; i < NUM_ENTRIES; i++)
+                if (file_isOpen)
                 {
-                    char fileName[12];
-                    strncpy();
-                }*/
+                    int i = 0;
+                    for (i = 0; i < 16; i++)
+                    {
+                        char fileName[12];
+                        memset(fileName, '\0', 11);
+                        strncpy(fileName, dir[i].DIR_NAME, 11);
+
+                        if (dir[i].DIR_Attr == ATTR_READ_ONLY || dir[i].DIR_Attr == ATTR_DIRECTORY || dir[i].DIR_Attr == ATTR_ARCHINVE)
+                        {
+                            printf("%s\n", fileName);
+                        }
+
+                    }
+
+                }
+                else
+                {
+                    printf("Error: File is not open yet.\n");
+                }
             }
             else if (strcmp(token[0], "read") == 0)
             {
