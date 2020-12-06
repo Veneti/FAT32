@@ -21,6 +21,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <stdint.h>
 
 #define MAX_NUM_ARGUMENTS 3
 
@@ -32,6 +33,28 @@
 #define MAX_COMMAND_SIZE 255 // The maximum command-line size
 
 
+//Structure from twitch office hour
+#define ATTR_READ_ONLY  0x01
+#define ATTR_HIDDEM     0x02
+#define ATTR_SYSTEM     0x04
+#define ATTR_VOLUME_ID  0x08
+#define ATTR_DIRECTORY  0x10
+#define ATTR_ARCHINVE   0x20
+//0x40 and 0x80 are unused
+
+
+//Structure from twitch office hour
+struct __attribute__ ( ( __packed__ ) ) DirectoryEntry
+{
+    char    DIR_NAME[11];
+    uint8_t DIR_Attr;
+    uint8_t Unused1[8];
+    uint16_t DIR_FirstClusterHigh;
+    uint8_t Unused2[4];
+    uint16_t DIR_FirstClusterLow;
+    uint32_t DIR_FileSize;
+};
+struct DirectoryEntry dir[16];
 
 
 int16_t BPB_BytsPerSec;
@@ -41,6 +64,18 @@ int8_t BPB_NumFATs;
 int16_t BPB_FATSz32;
 
 bool file_isOpen = false;
+FILE *filePtr;
+
+//from twitch
+int16_t nextLB(int32_t sector)
+{
+    uint32_t FATAddress = (BPB_BytsPerSec * BPB_RsvdSecCnt) + (sector * 4);
+    int16_t val;
+    fseek(filePtr, FATAddress, SEEK_SET);
+    fread( &val, 2, 1, filePtr);
+    return val;
+}
+
 
 int compare(char *cmdString, char *dirString)
 {
@@ -97,7 +132,6 @@ int compare(char *cmdString, char *dirString)
 
 int main()
 {
-    FILE *filePtr;
     char *cmd_str = (char *)malloc(MAX_COMMAND_SIZE);
 
     while (1)
@@ -170,6 +204,15 @@ int main()
 
                 fseek(filePtr, 36, SEEK_SET);
                 fread(&BPB_FATSz32, 1, 4, filePtr);
+
+                //root dir address is losted in both reserved sector and FATs
+                int rootAddress = ( BPB_RsvdSecCnt * BPB_BytsPerSec) + (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec);
+
+                //printf("%x\n", rootAddress);
+                fseek(filePtr, rootAddress, SEEK_SET);
+                fread(dir, sizeof(struct DirectoryEntry), 16, filePtr);
+
+
 
             }
             else if (strcmp(token[0], "info") == 0)
