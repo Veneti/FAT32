@@ -1,6 +1,6 @@
 ////////////////////////////////
 //    Name: Brian Truong      //
-//    ID:                     //
+//    ID: 1001549574          //
 //                            //
 //    Name: Tyler Do          //
 //    ID: 1001553345          //
@@ -18,6 +18,9 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
 
 #define MAX_NUM_ARGUMENTS 3
 
@@ -28,17 +31,20 @@
 
 #define MAX_COMMAND_SIZE 255 // The maximum command-line size
 
+
+
+
 int16_t BPB_BytsPerSec;
 int8_t BPB_SecPerClus;
 int16_t BPB_RsvdSecCnt;
 int8_t BPB_NumFATs;
-int16_t BPB_FATSz32
+int16_t BPB_FATSz32;
 
-bool file_isOpen = 0;
+bool file_isOpen = false;
 
 int compare(char *cmdString, char *dirString)
 {
-    char dotdot = "..";
+    char *dotdot = "..";
 
     if (strncmp(cmdString, dirString, 2) == 0)
     {
@@ -72,7 +78,7 @@ int compare(char *cmdString, char *dirString)
 
     if (tokenized)
     {
-        strncpy( (char*)expandedName+8, tokenized, strlen(token));
+        strncpy( (char*)(expandedName+8), tokenized, strlen(tokenized));
     }
 
     int i;
@@ -139,14 +145,32 @@ int main()
         {
             if (strcmp(token[0], "open") == 0)
             {
+                filePtr = fopen(token[1], "w");
                 if (filePtr == NULL)
                 {
-                    filePtr = fopen(token[1], "r");
+                    printf("Error: Improper format. Could not do 'open <%s>'\n", token[1]);
                 }
                 else
                 {
-                    perror("Error: Improper format. Please put in format open <filename>\n");
+                    file_isOpen = true;
                 }
+
+                //read bpb section
+                fseek(filePtr, 11, SEEK_SET);
+                fread(&BPB_BytsPerSec, 1, 2, filePtr);
+
+                fseek(filePtr, 13, SEEK_SET);
+                fread(&BPB_SecPerClus, 1, 2, filePtr);
+
+                fseek(filePtr, 14, SEEK_SET);
+                fread(&BPB_RsvdSecCnt, 1, 2, filePtr);
+
+                fseek(filePtr, 16, SEEK_SET);
+                fread(&BPB_NumFATs, 1, 2, filePtr);
+
+                fseek(filePtr, 36, SEEK_SET);
+                fread(&BPB_FATSz32, 1, 4, filePtr);
+
             }
             else if (strcmp(token[0], "info") == 0)
             {
@@ -165,41 +189,65 @@ int main()
                 {
                     perror("Error: Improper format. Please put in format close <filename>\n");
                 }
+
+                //print out bpb section in decimal and hex
+
+                printf("BPB_BytsPerSec:     %d  %x\n",BPB_BytsPerSec,BPB_BytsPerSec);
+                printf("BPB_SecPerClus:     %d  %x\n",BPB_SecPerClus,BPB_SecPerClus);
+                printf("BPB_RsvdSecCnt:     %d  %x\n",BPB_RsvdSecCnt,BPB_RsvdSecCnt);
+                printf("BPB_NumFATs:        %d  %x\n",BPB_NumFATs,BPB_NumFATs);
+                printf("BPB_FATSz32:        %d  %x\n",BPB_FATSz32,BPB_FATSz32);
+                
+
             }
             else if (strcmp(token[0], "stat") == 0)
             {
                 if (token[1] != NULL)
+                {
                     // stat(token[1]);
+                }
                 else
+                {
                     printf("Error: Improper format. Please put in format stat <filename> or <directory name>\n");
+                }
             }
             else if (strcmp(token[0], "get") == 0)
             {
                 if (token[1] != NULL)
+                {
                     // get(token[1]);
+                }
                 else
+                {
                     printf("Error: Improper format. Please put in format get <filename>\n");
+                }
             }
             else if (strcmp(token[0], "cd") == 0)
             {
                 if (token[1] != NULL)
+                {
                     // cd(token[1]);
                     //call compare
+                }
                 else
+                {
                     printf("Error: Improper format. Please put in format cd <directory>\n");
+                }
             }
             else if (strcmp(token[0], "ls") == 0)
             {
+                /*
                 int i;
                 for (i = 0; i < NUM_ENTRIES; i++)
                 {
                     char fileName[12];
-                    strncpy()
-                }
+                    strncpy();
+                }*/
             }
             else if (strcmp(token[0], "read") == 0)
             {
                 if (token[1] != NULL && token[2] != NULL && token[3] != NULL)
+                    printf("read\n");
                     // read(token[1], atoi(token[2]), atoi(token[3]));
                 else
                     printf("Error: Improper format. Please put in format read <filename> <position> <number of bytes>\n");
