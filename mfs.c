@@ -66,7 +66,18 @@ int16_t BPB_FATSz32;
 bool file_isOpen = false;
 FILE *filePtr;
 
-//from twitch
+/*
+    Finds the starting address of the block of the sector
+*/
+int32_t LBAToOffset(int32_t sector)
+{
+    return ((sector -2)* BPB_BytsPerSec) + (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec) 
+        + (BPB_RsvdSecCnt * BPB_BytsPerSec);
+}
+
+/*
+
+*/
 int16_t nextLB(int32_t sector)
 {
     uint32_t FATAddress = (BPB_BytsPerSec * BPB_RsvdSecCnt) + (sector * 4);
@@ -76,7 +87,7 @@ int16_t nextLB(int32_t sector)
     return val;
 }
 
-
+//from twitch office hours
 int compare(char *cmdString, char *dirString)
 {
     char *dotdot = "..";
@@ -95,15 +106,18 @@ int compare(char *cmdString, char *dirString)
 
     char imgName[12];
 
-    memset(imgName, '\0', 11);
     strncpy(imgName, dirString, 11);
+    imgName[11] = '\0';
+    
 
-    char input[12];
-    memset(input, '\0', 12);
+    char input[11];
+    memset(input, 0, 11);
     strncpy(input, cmdString, strlen(cmdString));
+    //expandedName[11] = '\0';
+
 
     char expandedName[12];
-    memset(expandedName, '\0', 12);
+    memset(expandedName, ' ', 12);
 
     //removes the .png in the file name
     char *tokenized = strtok(input, ".");
@@ -115,16 +129,19 @@ int compare(char *cmdString, char *dirString)
     {
         strncpy( (char*)(expandedName+8), tokenized, strlen(tokenized));
     }
+    expandedName[11] = '\0';
+
+
 
     int i;
     for (i = 0; i < 11; i++)
     {
         expandedName[i] = toupper(expandedName[i]);
     }
-
+    //printf("%s\n", expandedName);
     if (strncmp(expandedName, imgName, 11) == 0)
     {
-        return 0;
+        return 1;
     }
 
     return 0;
@@ -274,16 +291,46 @@ int main()
                     printf("Error: Improper format. Please put in format get <filename>\n");
                 }
             }
+
+            //from twitch office hours
             else if (strcmp(token[0], "cd") == 0)
             {
-                if (token[1] != NULL)
+                if (file_isOpen)
                 {
-                    // cd(token[1]);
-                    //call compare
+                    int i = 0, found = 0;
+                    for (i = 0; i < 16; i++)
+                    {
+                        if (compare(token[1], dir[i].DIR_NAME))
+                        {
+                            //printf("compare\n");
+                            int clusterLow = dir[i].DIR_FirstClusterLow;
+
+                            if (clusterLow == 0)
+                            {
+                                clusterLow = 2 ;
+                            }
+
+                            /*int offset = ((clusterLow -2)* BPB_BytsPerSec) + 
+                                    (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec) + 
+                                    (BPB_RsvdSecCnt * BPB_BytsPerSec);*/
+                            
+                            int offset = LBAToOffset(clusterLow);
+
+                            fseek(filePtr, offset, SEEK_SET);
+                            fread(dir, sizeof(struct DirectoryEntry), 16, filePtr);
+
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (found == 0)
+                    {
+                        printf("Error: The directory is not found.\n");
+                    }
                 }
                 else
                 {
-                    printf("Error: Improper format. Please put in format cd <directory>\n");
+                    printf("Error: File img is not open yet.\n");
                 }
             }
             else if (strcmp(token[0], "ls") == 0)
@@ -297,17 +344,16 @@ int main()
                         memset(fileName, '\0', 11);
                         strncpy(fileName, dir[i].DIR_NAME, 11);
 
-                        if (dir[i].DIR_Attr == ATTR_READ_ONLY || dir[i].DIR_Attr == ATTR_DIRECTORY || dir[i].DIR_Attr == ATTR_ARCHINVE)
+                        if ((dir[i].DIR_Attr == ATTR_READ_ONLY || dir[i].DIR_Attr == ATTR_DIRECTORY 
+                            || dir[i].DIR_Attr == ATTR_ARCHINVE) && fileName[0] != 0xffffffe5)
                         {
                             printf("%s\n", fileName);
                         }
-
                     }
-
                 }
                 else
                 {
-                    printf("Error: File is not open yet.\n");
+                    printf("Error: File img is not open yet.\n");
                 }
             }
             else if (strcmp(token[0], "read") == 0)
