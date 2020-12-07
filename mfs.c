@@ -23,7 +23,7 @@
 #include <ctype.h>
 #include <stdint.h>
 
-#define MAX_NUM_ARGUMENTS 3
+#define MAX_NUM_ARGUMENTS 16
 
 #define WHITESPACE " \t\n" // We want to split our command line up into tokens \
                            // so we need to define what delimits our tokens.   \
@@ -138,8 +138,6 @@ int compare(char *cmdString, char *dirString)
     }
     expandedName[11] = '\0';
 
-
-
     int i;
     for (i = 0; i < 11; i++)
     {
@@ -203,40 +201,47 @@ int main()
         {
             if (strcmp(token[0], "open") == 0)
             {
-                filePtr = fopen(token[1], "r");
-                if (filePtr == NULL)
+                if (file_isOpen == true)
                 {
-                    printf("Error: Improper format. Could not do 'open <%s>'\n", token[1]);
+                    printf("Error: File system image already open.\n");
                 }
                 else
                 {
-                    file_isOpen = true;
+                    filePtr = fopen(token[1], "r");
+                    if (filePtr == NULL)
+                    {
+                        printf("Error: Improper format. Could not do 'open <%s>'\n", token[1]);
+                    }
+                    else
+                    {
+                        file_isOpen = true;
+                    }
+
+                    //read bpb section from reference byte
+                    fseek(filePtr, 11, SEEK_SET);
+                    fread(&BPB_BytsPerSec, 1, 2, filePtr);
+
+                    fseek(filePtr, 13, SEEK_SET);
+                    fread(&BPB_SecPerClus, 1, 2, filePtr);
+
+                    fseek(filePtr, 14, SEEK_SET);
+                    fread(&BPB_RsvdSecCnt, 1, 2, filePtr);
+
+                    fseek(filePtr, 16, SEEK_SET);
+                    fread(&BPB_NumFATs, 1, 2, filePtr);
+
+                    fseek(filePtr, 36, SEEK_SET);
+                    fread(&BPB_FATSz32, 1, 4, filePtr);
+
+                    //root dir address is losted in both reserved sector and FATs
+                    int rootAddress = ( BPB_RsvdSecCnt * BPB_BytsPerSec) + 
+                            (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec);
+
+                    //printf("%x\n", rootAddress);
+                    fseek(filePtr, rootAddress, SEEK_SET);
+                    fread(dir, sizeof(struct DirectoryEntry), 16, filePtr);
                 }
-
-                //read bpb section from reference byte
-                fseek(filePtr, 11, SEEK_SET);
-                fread(&BPB_BytsPerSec, 1, 2, filePtr);
-
-                fseek(filePtr, 13, SEEK_SET);
-                fread(&BPB_SecPerClus, 1, 2, filePtr);
-
-                fseek(filePtr, 14, SEEK_SET);
-                fread(&BPB_RsvdSecCnt, 1, 2, filePtr);
-
-                fseek(filePtr, 16, SEEK_SET);
-                fread(&BPB_NumFATs, 1, 2, filePtr);
-
-                fseek(filePtr, 36, SEEK_SET);
-                fread(&BPB_FATSz32, 1, 4, filePtr);
-
-                //root dir address is losted in both reserved sector and FATs
-                int rootAddress = ( BPB_RsvdSecCnt * BPB_BytsPerSec) + 
-                        (BPB_NumFATs * BPB_FATSz32 * BPB_BytsPerSec);
-
-                //printf("%x\n", rootAddress);
-                fseek(filePtr, rootAddress, SEEK_SET);
-                fread(dir, sizeof(struct DirectoryEntry), 16, filePtr);
-
+                
 
 
             }
@@ -252,16 +257,17 @@ int main()
                 }
                 else
                 {
-                    perror("Error: No files are currently open.\n");
+                    perror("Error: File system not open.\n");
                 }
             }
             else if (strcmp(token[0], "bpb") == 0)
             {
                 if (file_isOpen)
                 {
-                    char *line = "----------------------------------------------";
+                    // char *line = "----------------------------------------------";
                     //print out bpb section in decimal and hex
-                    printf("\nBPB Stats Output    %-8s  %-10s\n%s\n","Decimal","Hex",line);
+                    // printf("\nBPB Stats Output    %-8s  %-10s\n%s\n","Decimal","Hex","----------
+                    // ------------------------------------");
                     printf("BPB_BytsPerSec:     %-8d  0x%-8x\n",BPB_BytsPerSec,BPB_BytsPerSec);
                     printf("BPB_SecPerClus:     %-8d  0x%-8x\n",BPB_SecPerClus,BPB_SecPerClus);
                     printf("BPB_RsvdSecCnt:     %-8d  0x%-8x\n",BPB_RsvdSecCnt,BPB_RsvdSecCnt);
@@ -299,7 +305,11 @@ int main()
             }
             else if (strcmp(token[0], "get") == 0)
             {
-                if (file_isOpen)
+                if (token[1] == NULL)
+                {
+                    printf("Error: Missing Parameters - get <filename>\n");
+                }
+                else if (file_isOpen)
                 {
                     char *dirstring = (char *)malloc(strlen(token[1]));
                     strncpy(dirstring, token[1], strlen(token[1]));
@@ -309,7 +319,7 @@ int main()
                     if(token[2] == NULL)
                     {
                         fseek(filePtr, LBAToOffset(cluster), SEEK_SET);
-                        unsigned char *ptr = malloc(size);
+                        unsigned char *ptr = new unsigned char(size);
                         fread(ptr, size, 1, filePtr);
                         fwrite(ptr, size, 1, newfp);
                         fclose(newfp);
@@ -318,7 +328,7 @@ int main()
                     {
                         newfp = fopen(token[2], "w");
                         fseek(filePtr, LBAToOffset(cluster), SEEK_SET);
-                        unsigned char *ptr = malloc(size);
+                        unsigned char *ptr = new unsigned char(size);
                         fread(ptr, size, 1, filePtr);
                         fwrite(ptr, size, 1, newfp);
                         fclose(newfp);
@@ -396,14 +406,19 @@ int main()
             }
             else if (strcmp(token[0], "read") == 0)
             {
-                if (file_isOpen)
+                if (token[1] == NULL || token[2] == NULL || token[3] == NULL)
+                {
+                    printf("Error: Missing Parameters - read <filename> <position> <number of bytes>\n");
+                }
+                else if (file_isOpen)
                 {
                     int i = 0;
                     int found = 0;
                     
                     int requestedOffset = atoi(token[2]);
+
                     int requestedBytes = atoi(token[3]);
-                    printf("compare.\n");
+                    // printf("compare.\n");
 
                     int bytesRaminingToRead = requestedBytes;
 
@@ -417,64 +432,65 @@ int main()
 
                     for (i = 0; i < 16; i++)
                     {
-                        printf("for loop.\n");
-
-                        char *readfile = token[1];
-                        //if (compare(token[1], dir[i].DIR_NAME))
-                        //readfile
+                        char *fileToken = token[1];
+                        char readfile[12];
+                        strncpy(readfile, token[1], 12);
+                        char DIRNAME[12];
+                        
+                        memcpy(DIRNAME, dir[i].DIR_NAME, 12);
+												directoryFormat(readfile);
+                        
                         if (compare(readfile, dir[i].DIR_NAME))
                         {
-                            printf("compare2.\n");
-
-                            found = 1;
+                            printf("hey we didnt get read but the code is the comments\n");
+                            char readResults;
                             int cluster = dir[i].DIR_FirstClusterLow;
-                            int searchSize = requestedOffset;
-                            //test loop from twitch
-                            while (searchSize >= BPB_BytsPerSec)
-                            {
-                                printf("%d\n",cluster);
-                                cluster = nextLB(cluster);
-                                searchSize -= BPB_BytsPerSec;
-                            }
-                            int offset = LBAToOffset(cluster);
-                            int byteOffset = BPB_BytsPerSec - (requestedOffset % BPB_BytsPerSec);
-                            fseek(filePtr, offset + byteOffset, SEEK_SET);
-                            int loopOffset = requestedOffset;
-                            
-                            
-                            unsigned char buffer[BPB_BytsPerSec];
+                            int clusterOffset = LBAToOffset(cluster);
+                            int counter;
 
-                            //determine the bytes in the first block
-                            int firstBlockBytes = BPB_BytsPerSec - requestedBytes;
-                            fread(buffer, 1, firstBlockBytes, filePtr);
-                            int j = 0;
-                            for (j = 0; j < byteOffset; j++)
-                            {
-                                printf("%x ", buffer[j]);
-                            }
+                            // for (counter = 0; counter < dir[i].DIR_FileSize; counter++)
+                            // {
+                            // 	if (counter % 512 == 0 && counter != 0)
+                            // 	{
+                            // 		cluster = nextLB(cluster);
+                            // 		clusterOffset = LBAToOffset(cluster);
+                            // 	}
+                            // 	fseek(filePtr, clusterOffset++, SEEK_SET);
+                            // 	fread(&readResults, 1, 1, filePtr);
+                            // 	if (counter >= requestedOffset && counter < (requestedOffset + requestedBytes))
+                            // 	{
+                            // 		printf("%s ", readResults);
+                            // 	}
 
-                            bytesRaminingToRead = bytesRaminingToRead - firstBlockBytes;
 
-                            while (bytesRaminingToRead >= 512)
-                            {
-                                cluster = nextLB(cluster);
-                                offset = LBAToOffset(cluster);
-                                fseek(filePtr, offset, SEEK_SET);
-                                fread(buffer, 1, BPB_BytsPerSec, filePtr);
-                                for (j = 0; j < BPB_BytsPerSec; j++)
-                                {
-                                    printf("%x ", buffer[j]);
-                                }
-                                bytesRaminingToRead -= BPB_BytsPerSec;
-                            }
-                            printf("\n");
 
+                            // found = 1;
+                            // int searchSize = requestedOffset;
+
+                            // while (searchSize >= BPB_BytsPerSec)
+                            // {
+                            //     cluster = nextLB(cluster);
+                            //     searchSize = searchSize - BPB_BytsPerSec;
+
+                            // }
+
+                            // int offset = LBAToOffset(cluster);
+                            // int byteOffset = (requestedOffset % BPB_BytsPerSec);
+
+                            // fseek(filePtr, offset + byteOffset, SEEK_SET);
+
+                            // unsigned char buffer[BPB_BytsPerSec];
+                            // fread(buffer, 1, byteOffset, filePtr);
+
+                            // for (i = 0; i < byteOffset; i++);
+                            // {
+                            //     printf("%x ", buffer[i]);
+                            // }
+                            // printf("\n");
                         }
-                        
-
                     }
-                    
                 }
+            }
                 else
                 {
                     printf("Error: No files are currently open.\n");
@@ -489,8 +505,6 @@ int main()
                 printf("Error: Invalid Command\n");
             }
         }
-  }
-
   return 0;
 }
 
@@ -534,7 +548,7 @@ int32_t clusterAtribute(char *dirString)
 	int i;
 	for (i = 0; i < 16; i++)
 	{
-		char *directory = malloc(11);
+		char *directory = (char*)malloc(11);
 		memset(directory, '\0', 11);
 		memcpy(directory, dir[i].DIR_NAME, 11);
 		
