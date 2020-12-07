@@ -68,7 +68,10 @@ FILE *filePtr;
 
 char correctDirectory[12];
 void directoryFormat(char *dirString);
+// void getFile(char *originalFilename, char *newFilename);
+// void get(char *dirname);
 int32_t clusterAtribute(char *dirString);
+int32_t getSizeOfCluster(int32_t cluster);
 
 /*
     Finds the starting address of the block of the sector (FAT slides)
@@ -96,9 +99,9 @@ int compare(char *cmdString, char *dirString)
 {
     char *dotdot = "..";
 
-    if (strncmp(cmdString, dirString, 2) == 0)
+    if (strncmp(dotdot, cmdString, 2) == 0)
     {
-        if (strncpy(cmdString, dirString, 2) == 0)
+        if (strncmp(cmdString, dirString, 2) == 0)
         {
             return 1;
         }
@@ -114,8 +117,8 @@ int compare(char *cmdString, char *dirString)
     imgName[11] = '\0';
     
 
-    char input[11];
-    memset(input, 0, 11);
+    char input[16];
+    memset(input, 0, 16);
     strncpy(input, cmdString, strlen(cmdString));
     //expandedName[11] = '\0';
 
@@ -237,10 +240,7 @@ int main()
 
 
             }
-            else if (strcmp(token[0], "info") == 0)
-            {
-                // info();
-            }
+            // m
             else if (strcmp(token[0], "close") == 0)
             {
                 if (file_isOpen)
@@ -283,16 +283,12 @@ int main()
                     int i;
                     for (i = 0; i < 16; i++)
                     {
-											if (cluster == dir[i].DIR_FirstClusterLow)
-											{
-												printf("File Attribute: %d\n", dir[i].DIR_Attr);
-												printf("File Size: %d\n", dir[i].DIR_FileSize);
-												printf("Starting Cluster Number: %d\n", cluster);
-											}
-                        // if(compare(dir[i].DIR_NAME, token[1]))
-                        // printf("%d  %d   %d   \n", dir[i].DIR_Attr, 
-                        //     dir[i].DIR_FileSize, dir[i].DIR_FirstClusterLow);	
-                        // break;
+                        if (cluster == dir[i].DIR_FirstClusterLow)
+                        {
+                            printf("File Attribute: %d\n", dir[i].DIR_Attr);
+                            printf("File Size: %d\n", dir[i].DIR_FileSize);
+                            printf("Starting Cluster Number: %d\n", cluster);
+                        }
                     }
                     
                 }
@@ -305,7 +301,29 @@ int main()
             {
                 if (file_isOpen)
                 {
-                    printf("dd\n");
+                    char *dirstring = (char *)malloc(strlen(token[1]));
+                    strncpy(dirstring, token[1], strlen(token[1]));
+                    int cluster = clusterAtribute(dirstring);
+                    int size = getSizeOfCluster(cluster);
+                    FILE *newfp = fopen(token[1], "w");
+                    if(token[2] == NULL)
+                    {
+                        fseek(filePtr, LBAToOffset(cluster), SEEK_SET);
+                        unsigned char *ptr = malloc(size);
+                        fread(ptr, size, 1, filePtr);
+                        fwrite(ptr, size, 1, newfp);
+                        fclose(newfp);
+                    }
+                    else
+                    {
+                        newfp = fopen(token[2], "w");
+                        fseek(filePtr, LBAToOffset(cluster), SEEK_SET);
+                        unsigned char *ptr = malloc(size);
+                        fread(ptr, size, 1, filePtr);
+                        fwrite(ptr, size, 1, newfp);
+                        fclose(newfp);
+                    }
+                                
                 }
                 else
                 {
@@ -323,7 +341,6 @@ int main()
                     {
                         if (compare(token[1], dir[i].DIR_NAME))
                         {
-                            //printf("compare\n");
                             int clusterLow = dir[i].DIR_FirstClusterLow;
 
                             if (clusterLow == 0)
@@ -386,11 +403,29 @@ int main()
                     
                     int requestedOffset = atoi(token[2]);
                     int requestedBytes = atoi(token[3]);
+                    printf("compare.\n");
+
+                    int bytesRaminingToRead = requestedBytes;
+
+                    if (requestedOffset < 0 )
+                    {
+                        printf("Error: Requested offset can not be less than 0.\n");
+                        printf("break.\n");
+
+                        break;
+                    }
 
                     for (i = 0; i < 16; i++)
                     {
-                        if (compare(token[1], dir[i].DIR_NAME))
+                        printf("for loop.\n");
+
+                        char *readfile = token[1];
+                        //if (compare(token[1], dir[i].DIR_NAME))
+                        //readfile
+                        if (compare(readfile, dir[i].DIR_NAME))
                         {
+                            printf("compare2.\n");
+
                             found = 1;
                             int cluster = dir[i].DIR_FirstClusterLow;
                             int searchSize = requestedOffset;
@@ -406,12 +441,31 @@ int main()
                             fseek(filePtr, offset + byteOffset, SEEK_SET);
                             int loopOffset = requestedOffset;
                             
+                            
                             unsigned char buffer[BPB_BytsPerSec];
-                            fread(buffer, 1, byteOffset, SEEK_SET);
+
+                            //determine the bytes in the first block
+                            int firstBlockBytes = BPB_BytsPerSec - requestedBytes;
+                            fread(buffer, 1, firstBlockBytes, filePtr);
                             int j = 0;
                             for (j = 0; j < byteOffset; j++)
                             {
                                 printf("%x ", buffer[j]);
+                            }
+
+                            bytesRaminingToRead = bytesRaminingToRead - firstBlockBytes;
+
+                            while (bytesRaminingToRead >= 512)
+                            {
+                                cluster = nextLB(cluster);
+                                offset = LBAToOffset(cluster);
+                                fseek(filePtr, offset, SEEK_SET);
+                                fread(buffer, 1, BPB_BytsPerSec, filePtr);
+                                for (j = 0; j < BPB_BytsPerSec; j++)
+                                {
+                                    printf("%x ", buffer[j]);
+                                }
+                                bytesRaminingToRead -= BPB_BytsPerSec;
                             }
                             printf("\n");
 
@@ -491,4 +545,18 @@ int32_t clusterAtribute(char *dirString)
 		}
 	}
 	return -1;
+}
+
+int32_t getSizeOfCluster(int32_t cluster)
+{
+    int i;
+    for (i = 0; i < 16; i++)
+    {
+        if (cluster == dir[i].DIR_FirstClusterLow)
+        {
+            int size = dir[i].DIR_FileSize;
+            return size;
+        }
+    }
+    return -1;
 }
